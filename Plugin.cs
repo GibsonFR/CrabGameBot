@@ -25,6 +25,8 @@ namespace GibsonTemplateMod
 
             //Ajouter ici toute vos class MonoBehaviour pour quelle soit active dans le jeu
             //Format: ClassInjector.RegisterTypeInIl2Cpp<NomDeLaClass>(); 
+            ClassInjector.RegisterTypeInIl2Cpp<AutoRLGL>();
+            ClassInjector.RegisterTypeInIl2Cpp<TouchingGround>();
 
             Harmony.CreateAndPatchAll(typeof(Plugin));
 
@@ -50,7 +52,7 @@ namespace GibsonTemplateMod
         {
             public Text text;
             float elapsedServerUpdate, elapsedClientUpdate, elapsedMenuUpdate;
-            bool init;
+            bool init, initTouchingGround, isReady;
             void Update()
             {
                 float elapsedTime = Time.deltaTime;
@@ -61,6 +63,7 @@ namespace GibsonTemplateMod
                 if (!init)
                 {
                     Utility.ReadConfigFile(Variables.configFilePath);
+                    UIFunctions.SkipCinematicCamera();
                     init = true;
                 }
 
@@ -85,6 +88,18 @@ namespace GibsonTemplateMod
                 {
                     text.text = Variables.menuTrigger ? DisplayFunctions.FormatLayout() : "";
                     elapsedMenuUpdate = 0f; // reset the timer
+                }
+
+                if (Variables.clientObject != null && !initTouchingGround)
+                {
+                    Variables.clientObject.AddComponent<TouchingGround>();
+                    initTouchingGround = true;
+                }
+
+                if (Variables.isClientBot && Variables.clientBody != null && Variables.modeId == 0 && !isReady)
+                {
+                    Utility.PressLobbyButton();
+                    isReady = true;
                 }
             }
 
@@ -117,6 +132,89 @@ namespace GibsonTemplateMod
             }
         }
 
+        public class TouchingGround : MonoBehaviour
+        {
+            void OnCollisionStay(Collision collision)
+            {
+                if (collision.gameObject.layer == LayerMask.NameToLayer("Ground") || collision.gameObject.layer == LayerMask.NameToLayer("Object"))
+                {
+                    Variables.grounded = true;
+                }
+            }
+            void OnCollisionExit(Collision collision)
+            {
+                Variables.grounded = false;
+            }
+        }
+
+        public class AutoRLGL : MonoBehaviour
+        {
+            Vector3 safePos = new Vector3(0, 0, 145), closestPlayerPos, playerPos;
+            float distanceToSafePos, distanceToClosestPlayer;
+            PlayerManager closestPlayer;
+            bool isMad, isMadSet;
+            float elapsed;
+            void Update()
+            {
+                elapsed += Time.deltaTime;
+
+                if (Variables.gameState == "Playing" && Variables.modeId == 1 && Variables.isClientBot)
+                {
+                    playerPos = Variables.clientBody.transform.position;
+                    closestPlayer = BotFunctions.FindClosestPlayer();
+
+                    if (closestPlayer != null) 
+                    {
+                        closestPlayerPos = closestPlayer.transform.position;
+                    }
+
+                    distanceToSafePos = Vector2.Distance(new Vector2(playerPos.x, playerPos.z), new Vector2(safePos.x, safePos.z));
+                    distanceToClosestPlayer = Vector3.Distance(closestPlayerPos, playerPos);
+
+                    if (IsStatueScanning() && playerPos.z < 128)
+                    {
+                        if (elapsed > 0.5f)
+                            BotFunctions.Combat(closestPlayerPos, 1f);
+
+                        isMadSet = false;
+                        isMad = false;
+                    }
+                    else
+                    {
+                        elapsed = 0f;
+                        if (!isMadSet && closestPlayer != null)
+                        {
+                            isMadSet = true;
+                            System.Random random = new();
+                            if (random.NextDouble() < 0.5f)
+                            {
+                                isMad = true;
+                            }
+                        }
+
+                        if (isMad && closestPlayer.transform.position.z + 5 > playerPos.z && distanceToClosestPlayer > 2)
+                        {
+                            BotFunctions.MoveBotToTarget(closestPlayerPos, 10f);
+                        }
+                        else if (distanceToSafePos > 5)
+                            BotFunctions.MoveBotToTarget(safePos, 9f);
+
+                        BotFunctions.LookAtTarget(closestPlayerPos);
+                    }
+                }
+            }
+
+            private bool IsStatueScanning()
+            {
+                GameObject statue = GameObject.Find("Statue");
+                if (statue != null)
+                {
+                    return (statue.GetComponent<MonoBehaviourPublicQuSiQuTrSiheQuLawhQuUnique>().field_Private_Quaternion_2 == Quaternion.identity);
+                }
+                return false;   
+            }
+        }
+
         //Plusieurs hook plus ou moins utile...
 
         [HarmonyPatch(typeof(SteamManager), nameof(SteamManager.Update))]
@@ -132,6 +230,11 @@ namespace GibsonTemplateMod
                 Utility.ReadBotWhiteList(Variables.botWhiteList, Variables.botWhiteListFilePath);
 
                 Variables.isClientBot = !Variables.botWhiteList.Contains(Variables.clientId);
+            }
+
+            if (Variables.isClientBot)
+            {
+                Application.targetFrameRate = Variables.exeFrameRate;
             }
         }
 
@@ -206,6 +309,8 @@ namespace GibsonTemplateMod
 
             //Ici aussi ajouter toute vos class MonoBehaviour pour quelle soit active dans le jeu
             //Format: NomDeLaClass nomDeLaClass = menuObject.AddComponent<NomDeLaClass>();
+            AutoRLGL autoRLGL = menuObject.AddComponent<AutoRLGL>();
+            TouchingGround touchingGround = menuObject.AddComponent<TouchingGround>();
 
             menuObject.transform.SetParent(__instance.transform);
             menuObject.transform.localPosition = new UnityEngine.Vector3(menuObject.transform.localPosition.x, -menuObject.transform.localPosition.y, menuObject.transform.localPosition.z);

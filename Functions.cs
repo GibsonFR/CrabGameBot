@@ -3,6 +3,115 @@
     //Ici on stock les fonctions, dans des class pour la lisibilité du code dans Plugin.cs 
 
     //Cette classe regroupe des fonctions qui servent a l'affichage d'infos utiles
+
+    public class BotFunctions
+    {
+        public static void Combat(Vector3 target, double combatProbability)
+        {
+            Vector3 playerPos = Variables.clientBody.transform.position;
+            var distance = Vector3.Distance(playerPos, target);
+            System.Random random = new System.Random();
+
+            if (distance <= 4.6f && random.NextDouble() < combatProbability)
+            {
+                LookAtTarget(target);
+                Variables.clientMovement.punchPlayers.Punch();
+            }
+        }
+
+        public static void LookAtTarget(Vector3 target)
+        {
+            Vector3 playerPos = Variables.clientBody.transform.position;
+            Vector3 vectorDir = new Vector3(target.x, 0, target.z) -
+                                new Vector3(Variables.clientBody.transform.position.x, 0, Variables.clientBody.transform.position.z);
+            Quaternion targetRotation = Quaternion.LookRotation(vectorDir);
+            Variables.clientMovement.playerCam.transform.rotation = targetRotation;
+            PlayerServerCommunication.Instance.ForceMovementUpdate();
+        }
+
+        public static PlayerManager FindClosestPlayer()
+        {
+            PlayerManager closestPlayer = null;
+            float closestDistance = float.PositiveInfinity;
+            foreach (var player in Variables.playersList)
+            {
+                try
+                {
+                    if (player.value == null) continue;
+                    if (player.value.steamProfile.m_SteamID == Variables.clientIdSafe) continue;
+                    if (player.value.dead) continue;
+
+                    var distance = Vector3.Distance(Variables.clientBody.transform.position, player.value.transform.position);
+
+                    if (distance < closestDistance)
+                    {
+                        closestDistance = distance;
+                        closestPlayer = player.value;
+                    }
+                }
+                catch { }
+            }
+            return closestPlayer;
+        }
+
+        public static void MoveBotToTarget(Vector3 target, float speed)
+        {
+            Vector3 playerPos = Variables.clientBody.transform.position;
+            Vector3 vectorDir = new Vector3(target.x, 0, target.z) -
+                                new Vector3(Variables.clientBody.transform.position.x, 0, Variables.clientBody.transform.position.z);
+            float finalSpeed = speed;
+
+            Vector3 raycastOrigin;
+            int groundLayer = LayerMask.NameToLayer("Ground");
+            int objectLayer = LayerMask.NameToLayer("Object");
+            LayerMask raycastLayer = (1 << groundLayer) | (1 << objectLayer);
+
+            RaycastHit hit = new();
+
+            for (int i = 0; i <= 7; i++)
+            {
+                raycastOrigin = new Vector3(playerPos.x, playerPos.y + (i - 1 * 0.5f), playerPos.z);
+
+                if (Physics.Raycast(raycastOrigin, vectorDir.normalized, out hit, 3f, raycastLayer))
+                {
+                    if (i <= 4)
+                    {
+                        Variables.clientMovement.Jump();
+                    }
+                    else
+                    {
+                        Variables.clientMovement.StartCrouch();
+                    }
+                }
+            }
+
+            switch (Variables.grounded, Variables.clientMovement.field_Private_EnumNPrivateSealedvaGeIc4vIcUnique_0)
+            {
+                case (false, MonoBehaviourPublicGaplfoGaTrorplTrRiBoUnique.EnumNPrivateSealedvaGeIc4vIcUnique.Generic):
+                    finalSpeed = 0.25f;
+                    break;
+                case (false, MonoBehaviourPublicGaplfoGaTrorplTrRiBoUnique.EnumNPrivateSealedvaGeIc4vIcUnique.Ice2x):
+                    finalSpeed = 0.25f;
+                    break;
+                case (true, MonoBehaviourPublicGaplfoGaTrorplTrRiBoUnique.EnumNPrivateSealedvaGeIc4vIcUnique.Ice2x):
+                    finalSpeed = finalSpeed / 2;
+                    break;
+            }
+            Variables.clientBody.AddForce(vectorDir.normalized * finalSpeed, ForceMode.VelocityChange);
+
+        }
+    }
+    public class UIFunctions
+    {
+        public static void SkipCinematicCamera()
+        {
+            GameObject mapCamera = GameObject.Find("MapCamera");
+            if (mapCamera != null)
+            {
+                mapCamera.GetComponent<MonoBehaviourPublicBoObInUnique>().Method_Private_Void_0();
+            }
+        }
+    }
     public class DisplayFunctions
     {
         public static void CreateDisplayFile(string path)
@@ -64,6 +173,14 @@
     //Cette class regroupe un ensemble de fonction plus ou moins utile
     public class Utility
     {
+
+        public static void PressLobbyButton()
+        {
+            GameObject button = GameObject.Find("Button/Button");
+            if (button != null && Variables.clientBody != null)
+                button.GetComponent<MonoBehaviour1PublicTrbuObreunObBoVeVeVeUnique>().TryInteract();
+        }
+
         //Cette fonction envoie un message dans le chat de la part du client
         public static void SendMessage(string message)
         {

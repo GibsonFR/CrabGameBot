@@ -55,7 +55,7 @@ namespace GibsonTemplateMod
         public static string gameState, lastGameState, layout, menuKey;
 
         //bool
-        public static bool menuTrigger, isClientBot;
+        public static bool menuTrigger, isClientBot, grounded;
 
 
 
