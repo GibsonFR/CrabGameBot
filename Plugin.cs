@@ -1,5 +1,4 @@
-﻿//Using (ici on importe des bibliothèques utiles)
-global using BepInEx;
+﻿global using BepInEx;
 global using BepInEx.IL2CPP;
 global using HarmonyLib;
 global using UnityEngine;
@@ -8,13 +7,19 @@ global using System.IO;
 global using UnhollowerRuntimeLib;
 global using System.Collections.Generic;
 global using System.Globalization;
-global using System.IO.Compression;
-global using System.Net.Http;
-global using System.Threading.Tasks;
 global using System.Linq;
 global using UnityEngine.UI;
+global using System.Collections;
+global using BepInEx.IL2CPP.Utils.Collections;
+global using static GibsonBot.Variables;
+global using static GibsonBot.InputState;
+global using static GibsonBot.Utility;
+global using static GibsonBot.GameData;
 
-namespace GibsonTemplateMod
+
+
+
+namespace GibsonBot
 {
     [BepInPlugin("PlaceHereGUID", "GibsonTemplateMod", "1.0.0")]
     public class Plugin : BasePlugin
@@ -22,37 +27,64 @@ namespace GibsonTemplateMod
         public override void Load()
         {
             ClassInjector.RegisterTypeInIl2Cpp<Basics>();
+            ClassInjector.RegisterTypeInIl2Cpp<TASManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<InputManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<SnowballsManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<PathFindingManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<NodeUsageVisualizer>();
 
-            //Ajouter ici toute vos class MonoBehaviour pour quelle soit active dans le jeu
-            //Format: ClassInjector.RegisterTypeInIl2Cpp<NomDeLaClass>(); 
-            ClassInjector.RegisterTypeInIl2Cpp<AutoRLGL>();
-            ClassInjector.RegisterTypeInIl2Cpp<TouchingGround>();
+            // GameMode
+            ClassInjector.RegisterTypeInIl2Cpp<SnowBrawlManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<DodgeBallManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<TileDriveManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<BlockDropManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<DeathFromAboveManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<BustlingButtonsManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<TheFloorIsLavaManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<TagManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<RedLightGreenLightManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<SteppingStonesManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<RaceManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<LightOutManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<KingOfTheHillManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<CrabFightManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<HideAndSeekManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<BombTagManager>();
+            ClassInjector.RegisterTypeInIl2Cpp<HatKingManager>();
+
 
             Harmony.CreateAndPatchAll(typeof(Plugin));
+            Harmony harmony = new("gibson.bot");
+            harmony.PatchAll(typeof(InputPatchs));
+            harmony.PatchAll(typeof(SnowballsPatch));
+            harmony.PatchAll(typeof(CrabFightPatchs));
 
-            //Ici on créer un fichier log.txt situé dans le dossier GibsonTemplateMod
-            Utility.CreateFolder(Variables.mainFolderPath, Variables.logFilePath);
-            Utility.CreateFile(Variables.logFilePath, Variables.logFilePath);
-            Utility.ResetFile(Variables.logFilePath, Variables.logFilePath);
+            CreateFolder(mainFolderPath, logFilePath);
+            CreateFolder(configFolderPath, logFilePath);
+            CreateFile(logFilePath, logFilePath);
+            ResetFile(logFilePath, logFilePath);
 
-            Utility.CreateFile(Variables.botWhiteListFilePath, Variables.logFilePath);
+            CreateFile(botWhiteListFilePath, logFilePath);
 
-            //Ici on load tout ce  qui  est relatif a l'affichage
-            Variables.DisplayDataCallbacks = new System.Collections.Generic.Dictionary<string, System.Func<string>>();
+            DisplayDataCallbacks = [];
 
-            DisplayFunctions.CreateDisplayFile(Variables.displayFilePath);
+            DisplayFunctions.CreateDisplayFile(displayFilePath);
             DisplayFunctions.LoadMenuLayout();
             DisplayFunctions.RegisterDefaultCallbacks();
 
-            Utility.SetConfigFile(Variables.configFilePath);
+            SetConfigFile(configFilePath);
+
+            CreateTechsFolders(techFolderPath, mapNameFilePath);
+            CreateTechsFolders(tagBotTechFolderPath, mapNameFilePath);
+            CreateTechsFolders(KOTHbotTechFolderPath, mapNameFilePath);
+            CreateTechsFolders(raceBotTechFolderPath, mapNameFilePath);
         }
 
-        //Cette class permet de récupérer des variables de base ne pas toucher sauf pour rajouter d'autres variables a Update
         public class Basics : MonoBehaviour
         {
             public Text text;
             float elapsedServerUpdate, elapsedClientUpdate, elapsedMenuUpdate;
-            bool init, initTouchingGround, isReady;
+            bool init, isReady;
             void Update()
             {
                 float elapsedTime = Time.deltaTime;
@@ -62,7 +94,7 @@ namespace GibsonTemplateMod
 
                 if (!init)
                 {
-                    Utility.ReadConfigFile(Variables.configFilePath);
+                    Utility.ReadConfigFile(configFilePath);
                     UIFunctions.SkipCinematicCamera();
                     init = true;
                 }
@@ -72,33 +104,27 @@ namespace GibsonTemplateMod
                     BasicUpdateServer();
                     elapsedServerUpdate = 0f;
                 }
-                    
+
                 if (elapsedClientUpdate > 1f)
                 {
                     BasicUpdateClient();
                     elapsedClientUpdate = 0f;
                 }
 
-                if (Input.GetKeyDown(Variables.menuKey))
+                if (Input.GetKeyDown(menuKey))
                 {
-                    Variables.menuTrigger = !Variables.menuTrigger;
+                    menuTrigger = !menuTrigger;
                 }
 
-                if (elapsedMenuUpdate >= Variables.displayFrameRate)
+                if (elapsedMenuUpdate >= displayFrameRate)
                 {
-                    text.text = Variables.menuTrigger ? DisplayFunctions.FormatLayout() : "";
+                    text.text = menuTrigger ? DisplayFunctions.FormatLayout() : "";
                     elapsedMenuUpdate = 0f; // reset the timer
                 }
 
-                if (Variables.clientObject != null && !initTouchingGround)
+                if (isClientBot && clientBody != null && modeId == 0 && !isReady)
                 {
-                    Variables.clientObject.AddComponent<TouchingGround>();
-                    initTouchingGround = true;
-                }
-
-                if (Variables.isClientBot && Variables.clientBody != null && Variables.modeId == 0 && !isReady)
-                {
-                    Utility.PressLobbyButton();
+                    PressLobbyButton();
                     isReady = true;
                 }
             }
@@ -106,190 +132,46 @@ namespace GibsonTemplateMod
             //Ceci mets a jour les données relative au Client(fonctionne uniquement si le client a un Rigidbody (en vie))
             void BasicUpdateClient()
             {
-                Variables.clientBody = ClientData.GetClientBody();
-                if (Variables.clientBody == null) return;
+                clientBody = ClientData.GetClientBody();
+                if (clientBody == null) return;
 
-                Variables.clientObject = ClientData.GetClientObject();
-                Variables.clientMovement = ClientData.GetClientMovement();
-                Variables.clientInventory = ClientData.GetClientInventory();
-                Variables.clientStatus = PlayerStatus.Instance;
+                clientObject = ClientData.GetClientObject();
+                clientMovement = ClientData.GetClientMovement();
+                clientInventory = ClientData.GetClientInventory();
+                clientStatus = PlayerStatus.Instance;
             }
 
             //Ceci mets a jour les données relative au Server
             void BasicUpdateServer()
             {
-                Variables.chatBoxInstance = ChatBox.Instance;
-                Variables.gameManager = GameData.GetGameManager();
-                Variables.lobbyManager = GameData.GetLobbyManager();
-                Variables.steamManager = GameData.GetSteamManager();
-                Variables.mapId = GameData.GetMapId();
-                Variables.modeId = GameData.GetModeId();
-                Variables.gameState = GameData.GetGameState();
-                Variables.activePlayers = Variables.gameManager.activePlayers;
-                Variables.playersList = Variables.gameManager.activePlayers.entries.ToList();
-                if (Variables.gameState != Variables.lastGameState)
-                    Variables.lastGameState = Variables.gameState;
-            }
-        }
-
-        public class TouchingGround : MonoBehaviour
-        {
-            void OnCollisionStay(Collision collision)
-            {
-                if (collision.gameObject.layer == LayerMask.NameToLayer("Ground") || collision.gameObject.layer == LayerMask.NameToLayer("Object"))
-                {
-                    Variables.grounded = true;
-                }
-            }
-            void OnCollisionExit(Collision collision)
-            {
-                Variables.grounded = false;
-            }
-        }
-
-        public class AutoRLGL : MonoBehaviour
-        {
-            Vector3 safePos = new Vector3(0, 0, 145), closestPlayerPos, playerPos;
-            float distanceToSafePos, distanceToClosestPlayer;
-            PlayerManager closestPlayer;
-            bool isMad, isMadSet;
-            float elapsed;
-            void Update()
-            {
-                elapsed += Time.deltaTime;
-
-                if (Variables.gameState == "Playing" && Variables.modeId == 1 && Variables.isClientBot)
-                {
-                    playerPos = Variables.clientBody.transform.position;
-                    closestPlayer = BotFunctions.FindClosestPlayer();
-
-                    if (closestPlayer != null) 
-                    {
-                        closestPlayerPos = closestPlayer.transform.position;
-                    }
-
-                    distanceToSafePos = Vector2.Distance(new Vector2(playerPos.x, playerPos.z), new Vector2(safePos.x, safePos.z));
-                    distanceToClosestPlayer = Vector3.Distance(closestPlayerPos, playerPos);
-
-                    if (IsStatueScanning() && playerPos.z < 128)
-                    {
-                        if (elapsed > 0.5f)
-                            BotFunctions.Combat(closestPlayerPos, 1f);
-
-                        isMadSet = false;
-                        isMad = false;
-                    }
-                    else
-                    {
-                        elapsed = 0f;
-                        if (!isMadSet && closestPlayer != null)
-                        {
-                            isMadSet = true;
-                            System.Random random = new();
-                            if (random.NextDouble() < 0.5f)
-                            {
-                                isMad = true;
-                            }
-                        }
-
-                        if (isMad && closestPlayer.transform.position.z + 5 > playerPos.z && distanceToClosestPlayer > 2)
-                        {
-                            BotFunctions.MoveBotToTarget(closestPlayerPos, 10f);
-                        }
-                        else if (distanceToSafePos > 5)
-                            BotFunctions.MoveBotToTarget(safePos, 9f);
-
-                        BotFunctions.LookAtTarget(closestPlayerPos);
-                    }
-                }
-            }
-
-            private bool IsStatueScanning()
-            {
-                GameObject statue = GameObject.Find("Statue");
-                if (statue != null)
-                {
-                    return (statue.GetComponent<MonoBehaviourPublicQuSiQuTrSiheQuLawhQuUnique>().field_Private_Quaternion_2 == Quaternion.identity);
-                }
-                return false;   
+                mapId = GetMapId();
+                modeId = GetModeId();
             }
         }
 
         //Plusieurs hook plus ou moins utile...
 
-        [HarmonyPatch(typeof(SteamManager), nameof(SteamManager.Update))]
+        [HarmonyPatch(typeof(SteamManager), nameof(SteamManager.Awake))]
         [HarmonyPostfix]
-        public static void OnSteamManagerUpdate(SteamManager __instance)
+        public static void OnSteamManagerAwake(SteamManager __instance)
         {
-            //Mets a jour le steamId du client des le lancement du jeu
-            if (Variables.clientIdSafe == 0)
+            if (steamManagerAwakeCheck) return;
+            clientId = (ulong)__instance.field_Private_CSteamID_0;
+
+            Utility.ReadBotWhiteList(botWhiteList, botWhiteListFilePath);
+            isClientBot = !botWhiteList.Contains(clientId);
+            if (isClientBot)
             {
-                Variables.clientId = (ulong)__instance.field_Private_CSteamID_0;
-                Variables.clientIdSafe = Variables.clientId;
-
-                Utility.ReadBotWhiteList(Variables.botWhiteList, Variables.botWhiteListFilePath);
-
-                Variables.isClientBot = !Variables.botWhiteList.Contains(Variables.clientId);
+                Application.targetFrameRate = exeFrameRate;
             }
-
-            if (Variables.isClientBot)
-            {
-                Application.targetFrameRate = Variables.exeFrameRate;
-            }
+            steamManagerAwakeCheck = true;
         }
 
-        [HarmonyPatch(typeof(GameMode), nameof(GameMode.Update))]
-        [HarmonyPostfix]
-        public static void GameModeUpdate(GameMode __instance)
-        {
-        }
-
-        [HarmonyPatch(typeof(ServerHandle), nameof(ServerHandle.GameRequestToSpawn))]
+        [HarmonyPatch(typeof(DamageVignette), nameof(DamageVignette.Damage))]
         [HarmonyPrefix]
-        public static void ServerHandleGameRequestToSpawn(ulong __0)
+        public static void OnDamage()
         {
-        }
-
-        [HarmonyPatch(typeof(GameMode), nameof(GameMode.Init))]
-        [HarmonyPostfix]
-        public static void GameModeInit()
-        {
-        }
-
-        [HarmonyPatch(typeof(GameLoop), nameof(GameLoop.CheckGameOver))]
-        [HarmonyPrefix]
-        public static void GameLoopCheckGameOver()
-        {
-        }
-
-        [HarmonyPatch(typeof(GameLoop), nameof(GameLoop.StartGames))]
-        [HarmonyPrefix]
-        public static void GameLoopStartGames()
-        {
-        }
-
-        [HarmonyPatch(typeof(GameLoop), nameof(GameLoop.NextGame))]
-        [HarmonyPrefix]
-        public static void GameLoopNextGame()
-        {
-        }
-
-        [HarmonyPatch(typeof(ServerSend), nameof(ServerSend.SendWinner))]
-        [HarmonyPrefix]
-        public static void ServerSendSendWinner()
-        {
-        }
-
-        [HarmonyPatch(typeof(GameLoop), nameof(GameLoop.RestartLobby))]
-        [HarmonyPrefix]
-        public static void GameLoopRestartLobby()
-        {
-        }
-
-        [HarmonyPatch(typeof(GameManager), nameof(GameManager.PlayerDied))]
-        [HarmonyPostfix]
-        public static void GameManagerPlayerDied(ulong __0, ulong __1)
-        {
+            AutoTechFunctions.HandleReplayEnd();
         }
 
 
@@ -297,26 +179,46 @@ namespace GibsonTemplateMod
         [HarmonyPostfix]
         public static void UIAwakePatch(GameUI __instance)
         {
-            GameObject menuObject = new GameObject();
-            Text text = menuObject.AddComponent<Text>();
+            GameObject plugin = new GameObject();
+            Text text = plugin.AddComponent<Text>();
             text.font = (Font)Resources.GetBuiltinResource<Font>("Arial.ttf");
             text.supportRichText = true;
             text.raycastTarget = false;
             text.fontSize = 18;
 
-            Basics basics = menuObject.AddComponent<Basics>();
+            Basics basics = plugin.AddComponent<Basics>();
             basics.text = text;
 
-            //Ici aussi ajouter toute vos class MonoBehaviour pour quelle soit active dans le jeu
-            //Format: NomDeLaClass nomDeLaClass = menuObject.AddComponent<NomDeLaClass>();
-            AutoRLGL autoRLGL = menuObject.AddComponent<AutoRLGL>();
-            TouchingGround touchingGround = menuObject.AddComponent<TouchingGround>();
+            plugin.AddComponent<InputManager>();
+            plugin.AddComponent<TASManager>();
+            plugin.AddComponent<SnowballsManager>();
+            plugin.AddComponent<PathFindingManager>();
+            plugin.AddComponent<NodeUsageVisualizer>();
 
-            menuObject.transform.SetParent(__instance.transform);
-            menuObject.transform.localPosition = new UnityEngine.Vector3(menuObject.transform.localPosition.x, -menuObject.transform.localPosition.y, menuObject.transform.localPosition.z);
-            RectTransform rt = menuObject.GetComponent<RectTransform>();
-            rt.pivot = new UnityEngine.Vector2(0, 1);
-            rt.sizeDelta = new UnityEngine.Vector2(1920, 1080);
+            // GameMode
+            plugin.AddComponent<SnowBrawlManager>();
+            plugin.AddComponent<DodgeBallManager>();
+            plugin.AddComponent<TileDriveManager>();
+            plugin.AddComponent<BlockDropManager>();
+            plugin.AddComponent<DeathFromAboveManager>();
+            plugin.AddComponent<BustlingButtonsManager>();
+            plugin.AddComponent<TheFloorIsLavaManager>();
+            plugin.AddComponent<TagManager>();
+            plugin.AddComponent<RedLightGreenLightManager>();
+            plugin.AddComponent<SteppingStonesManager>();
+            plugin.AddComponent<RaceManager>();
+            plugin.AddComponent<LightOutManager>();
+            plugin.AddComponent<KingOfTheHillManager>();
+            plugin.AddComponent<CrabFightManager>();
+            plugin.AddComponent<HideAndSeekManager>();
+            plugin.AddComponent<BombTagManager>();
+            plugin.AddComponent<HatKingManager>();
+
+            plugin.transform.SetParent(__instance.transform);
+            plugin.transform.localPosition = new(plugin.transform.localPosition.x, -plugin.transform.localPosition.y, plugin.transform.localPosition.z);
+            RectTransform rt = plugin.GetComponent<RectTransform>();
+            rt.pivot = new(0, 1);
+            rt.sizeDelta = new(1920, 1080);
         }
 
         //Anticheat Bypass 
